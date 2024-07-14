@@ -1,12 +1,12 @@
 // // SPDX-License-Identifier: MIT
 // pragma solidity ^0.8.24;
 
-// import {BaseHook} from "v4-periphery/BaseHook.sol"; 
+// import {BaseHook} from "src/CLBaseHook.sol"; 
 // import {BaseClass} from "./BaseClass.sol";
 // import {Rug} from "./Rug.sol";
 // import {Slippage} from "./Slippage.sol";
-// import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
-// import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
+// import {Hooks} from "../lib/pancake-v4-core/src/pool-cl/libraries/CLHooks.sol";
+// import {IPoolManager} from "../lib/pancake-v4-core/src/interfaces/IPoolManager.sol";
 
 // contract PM is Rug, Slippage {
 

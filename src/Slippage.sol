@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {BaseHook} from "v4-periphery/BaseHook.sol";
-import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
-import {SafeCast} from "../lib/v4-core/src/libraries/SafeCast.sol";
-import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
-import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "../lib/v4-core/src/types/PoolId.sol";
-import {toBalanceDelta, BalanceDelta, BalanceDeltaLibrary} from "../lib/v4-core/src/types/BalanceDelta.sol";
-import {BeforeSwapDelta, toBeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/v4-core/src/types/BeforeSwapDelta.sol";
+import {CLBaseHook} from "src/CLBaseHook.sol";
+import {Hooks} from "../lib/pancake-v4-core/src/pool-cl/libraries/CLHooks.sol";
+import {SafeCast} from "../lib/pancake-v4-core/src/libraries/SafeCast.sol";
+import {IPoolManager} from "../lib/pancake-v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "../lib/pancake-v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "../lib/pancake-v4-core/src/types/PoolId.sol";
+import {toBalanceDelta, BalanceDelta, BalanceDeltaLibrary} from "../lib/pancake-v4-core/src/types/BalanceDelta.sol";
+import {BeforeSwapDelta, toBeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/pancake-v4-core/src/types/BeforeSwapDelta.sol";
 import {BaseClass} from "./BaseClass.sol";
 
-import {Currency, CurrencyLibrary} from "../lib/v4-core/src/types/Currency.sol";
+import {Currency, CurrencyLibrary} from "../lib/pancake-v4-core/src/types/Currency.sol";
 
 int256 constant PRECISION = 1e18;
 int24 constant MIN_TICK = -887220;
@@ -29,7 +29,7 @@ contract Slippage is BaseClass {
     using CurrencyLibrary for Currency;
     uint256 startTime;
     uint256 endTime;
-    constructor(IPoolManager _poolManager) BaseHook(_poolManager) {
+    constructor(IPoolManager _poolManager) CLBaseHook(_poolManager) {
         startTime = 1000;
         endTime = 2000;
     }
@@ -42,13 +42,7 @@ contract Slippage is BaseClass {
     mapping(address => int256) userLiquidity;
     int256 totalLiquidity;
 
-    function getHookPermissions()
-        public
-        pure
-        virtual
-        override
-        returns (Hooks.Permissions memory)
-    {
+    function getHookPermissions() public pure virtual override returns (Hooks.Permissions memory) {
         return
             Hooks.Permissions({
                 beforeInitialize: false,
@@ -73,8 +67,7 @@ contract Slippage is BaseClass {
     function _calcLiquidityCoef(int256 price) internal view returns (int256) {
         int256 currentBlock = int256(block.timestamp);
         int256 marketDuration = int256(endTime) - int256(startTime);
-        int256 percentComplete = ((currentBlock - int256(startTime)) * 1e18) /
-            marketDuration;
+        int256 percentComplete = ((currentBlock - int256(startTime)) * 1e18) / marketDuration;
         int256 initialPrice = 5e17; // 0.5 in 18 decimal fixed-point
 
         // Calculate time-based decay
@@ -92,9 +85,7 @@ contract Slippage is BaseClass {
     function abs(int256 x) internal pure returns (int256) {
         return x >= 0 ? x : -x;
     }
-    function convertSqrtPriceX96ToPrice(
-        uint160 sqrtPriceX96
-    ) internal pure returns (int256) {
+    function convertSqrtPriceX96ToPrice(uint160 sqrtPriceX96) internal pure returns (int256) {
         uint256 Q96 = 2 ** 96;
         uint256 priceX192 = uint256(sqrtPriceX96) * uint256(sqrtPriceX96);
         uint256 price = (priceX192 * 1e18) / (Q96 * Q96);
@@ -110,12 +101,8 @@ contract Slippage is BaseClass {
         super._beforeSwap(usr, key, params, data);
         int256 price = convertSqrtPriceX96ToPrice(params.sqrtPriceLimitX96);
         int256 liquidityCoef = _calcLiquidityCoef(price);
-        int256 specifiedDelta = (params.amountSpecified * PRECISION) /
-            liquidityCoef;
-        BeforeSwapDelta beforeSwapDelta = toBeforeSwapDelta(
-            int128(specifiedDelta),
-            0
-        );
+        int256 specifiedDelta = (params.amountSpecified * PRECISION) / liquidityCoef;
+        BeforeSwapDelta beforeSwapDelta = toBeforeSwapDelta(int128(specifiedDelta), 0);
 
         int256 scaledFee = (int256(uint256(key.fee)) * 1e18) / liquidityCoef;
         require(scaledFee < int256(uint256(type(uint24).max)), "overflow");
@@ -124,11 +111,7 @@ contract Slippage is BaseClass {
 
         require(specifiedDelta < 0, "must be input swap");
 
-        return (
-            BaseHook.beforeSwap.selector,
-            beforeSwapDelta,
-            uint24(uint256(scaledFee))
-        );
+        return (CLBaseHook.beforeSwap.selector, beforeSwapDelta, uint24(uint256(scaledFee)));
     }
 
     event Logging(int256 amount0Delta, int256 amount1Delta);
@@ -146,30 +129,19 @@ contract Slippage is BaseClass {
         int256 amount1Delta;
 
         {
-            (int256 amount0, int256 amount1) = (
-                delta.amount0(),
-                delta.amount1()
-            );
+            (int256 amount0, int256 amount1) = (delta.amount0(), delta.amount1());
             int256 price = convertSqrtPriceX96ToPrice(params.sqrtPriceLimitX96);
-            (int256 amount0Deflated, int256 amount1Deflated) = _deflateAmounts(
-                amount0,
-                amount1,
-                price
-            );
+            (int256 amount0Deflated, int256 amount1Deflated) = _deflateAmounts(amount0, amount1, price);
             amount0Delta = amount0 - amount0Deflated;
             amount1Delta = amount1 - amount1Deflated;
         }
         emit Logging(amount0Delta, amount1Delta);
         // poolManager.mint(usr, key.currency1.toId(), int128(-amount0Delta)); todo this is negative and would underflow
 
-        return (BaseHook.afterSwap.selector, int128(-amount0Delta));
+        return (CLBaseHook.afterSwap.selector, int128(-amount0Delta));
     }
 
-    function _deflateAmounts(
-        int256 amount0,
-        int256 amount1,
-        int256 price
-    ) internal view returns (int256, int256) {
+    function _deflateAmounts(int256 amount0, int256 amount1, int256 price) internal view returns (int256, int256) {
         int256 liquidityCoef = _calcLiquidityCoef(price);
 
         int256 amount0Deflated = (amount0 * PRECISION) * liquidityCoef;
@@ -187,16 +159,13 @@ contract Slippage is BaseClass {
     ) internal virtual override returns (bytes4) {
         super._beforeAddLiquidity(usr, key, params, data);
         require(userLiquidity[usr] == 0, "no more liquidity");
-        require(
-            params.tickLower == MIN_TICK && params.tickUpper == MAX_TICK,
-            "No ticks"
-        );
+        require(params.tickLower == MIN_TICK && params.tickUpper == MAX_TICK, "No ticks");
 
         // up liquidity
         userDelta[usr] = globalDelta;
         totalLiquidity += params.liquidityDelta;
 
-        return BaseHook.beforeAddLiquidity.selector;
+        return CLBaseHook.beforeAddLiquidity.selector;
     }
 
     function _afterRemoveLiquidity(
@@ -218,10 +187,7 @@ contract Slippage is BaseClass {
         int256 amount1 = int256(delta.amount1()) +
             ((userDelta[usr].token1 - globalDelta.token1) * liquidityRemoved) /
             PRECISION;
-        BalanceDelta newDelta = toBalanceDelta(
-            int128(amount0),
-            int128(amount1)
-        );
+        BalanceDelta newDelta = toBalanceDelta(int128(amount0), int128(amount1));
 
         // TODO burn some tokens from the user
 
@@ -229,6 +195,6 @@ contract Slippage is BaseClass {
         totalLiquidity += params.liquidityDelta;
         userLiquidity[usr] -= liquidityRemoved;
 
-        return (BaseHook.afterRemoveLiquidity.selector, newDelta);
+        return (CLBaseHook.afterRemoveLiquidity.selector, newDelta);
     }
 }

@@ -1,26 +1,26 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {BaseHook} from "../lib/v4-periphery/contracts/BaseHook.sol"; 
-import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
-import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
-import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "../lib/v4-core/src/types/PoolId.sol";
-import {BalanceDelta} from "../lib/v4-core/src/types/BalanceDelta.sol";
-import {Currency, CurrencyLibrary} from "../lib/v4-core/src/types/Currency.sol";
-import {IHooks} from "../lib/v4-core/src/interfaces/IHooks.sol";
-import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/v4-core/src/types/BeforeSwapDelta.sol";
-import {IERC20} from "../lib/v4-periphery/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {CLBaseHook} from "src/CLBaseHook.sol";
+import {Hooks} from "../lib/pancake-v4-core/src/pool-cl/libraries/CLHooks.sol";
+import {IPoolManager} from "../lib/pancake-v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "../lib/pancake-v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "../lib/pancake-v4-core/src/types/PoolId.sol";
+import {BalanceDelta} from "../lib/pancake-v4-core/src/types/BalanceDelta.sol";
+import {Currency, CurrencyLibrary} from "../lib/pancake-v4-core/src/types/Currency.sol";
+import {IHooks} from "../lib/pancake-v4-core/src/interfaces/IHooks.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/pancake-v4-core/src/types/BeforeSwapDelta.sol";
+import {IERC20} from "../lib/pancake-v4-periphery/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 /*
-*   @title AuctionCreator
-*   @notice This AuctionCreator hook protects LPs in prediction market pools where 
-*   outcome tokens are traded for underlying tokens.
-*   eg. Who will win 2024 US Presidential Election, Trump or Biden? 
-*   The market over this question is created by minting $TRUMP and $BIDEN against $DAI.
-*   The market will trade in the $TRUMP/$DAI and $BIDEN/$DAI pools
-*/
-contract AuctionHook is BaseHook {
+ *   @title AuctionCreator
+ *   @notice This AuctionCreator hook protects LPs in prediction market pools where
+ *   outcome tokens are traded for underlying tokens.
+ *   eg. Who will win 2024 US Presidential Election, Trump or Biden?
+ *   The market over this question is created by minting $TRUMP and $BIDEN against $DAI.
+ *   The market will trade in the $TRUMP/$DAI and $BIDEN/$DAI pools
+ */
+contract AuctionHook is CLBaseHook {
     using PoolIdLibrary for PoolKey;
 
     struct Auction {
@@ -33,9 +33,8 @@ contract AuctionHook is BaseHook {
         uint64 expiry;
         bool isAscending;
     }
-
     event AuctionBid(uint256 id, Auction auction);
-    
+
     bool public immutable isZeroUnderlying; // true if currency0 is the underlying collateral eg $DAI $ETH
 
     uint256 public constant TIMEOUT = 60 * 60; // 1 hour
@@ -44,29 +43,29 @@ contract AuctionHook is BaseHook {
 
     uint256 public count;
     address public owner;
-    mapping(uint256 => Auction) public auctions; 
+    mapping(uint256 => Auction) public auctions;
 
-    constructor(IPoolManager _poolManager, bool _isZeroUnderlying) BaseHook(_poolManager) {
+    constructor(IPoolManager _poolManager, bool _isZeroUnderlying) CLBaseHook(_poolManager) {
         isZeroUnderlying = _isZeroUnderlying;
     }
 
-    function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
-        return Hooks.Permissions({
-            beforeInitialize: false,
-            afterInitialize: false,
-            beforeAddLiquidity: false,
-            afterAddLiquidity: false,
-            beforeRemoveLiquidity: false,
-            afterRemoveLiquidity: false,
-            beforeSwap: true,
-            afterSwap: true,
-            beforeDonate: false,
-            afterDonate: false,
-            beforeSwapReturnDelta: false,
-            afterSwapReturnDelta: true,
-            afterAddLiquidityReturnDelta: false,
-            afterRemoveLiquidityReturnDelta: false
-        });
+    function getHooksRegistrationBitmap() external pure override returns (uint16) {
+        return
+            _hooksRegistrationBitmapFrom(
+                Permissions({
+                    beforeInitialize: false,
+                    afterInitialize: false,
+                    beforeAddLiquidity: false,
+                    afterAddLiquidity: false,
+                    beforeRemoveLiquidity: false,
+                    afterRemoveLiquidity: false,
+                    beforeSwap: true,
+                    afterSwap: true,
+                    beforeDonate: false,
+                    afterDonate: false,
+                    noOp: false
+                })
+            );
     }
 
     // @inheritdoc IHooks
@@ -75,18 +74,13 @@ contract AuctionHook is BaseHook {
         PoolKey calldata key,
         IPoolManager.SwapParams calldata params,
         bytes calldata hookData
-    ) external override returns (bytes4, BeforeSwapDelta, uint24){
+    ) external override returns (bytes4, BeforeSwapDelta, uint24) {
         // afterSwap hook must take the output token (since we auction the output)
         // since it's best practice to manage the afterSwap delat with the unspecified currency
         // we hence require the input to be specified
         require(params.amountSpecified < 0, "Invalid swap");
-        return (
-            BaseHook.beforeSwap.selector,
-            BeforeSwapDeltaLibrary.ZERO_DELTA,
-            0
-        );
+        return (CLBaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
-
 
     /// @notice The hook called after a swap
     /// @param sender The initial msg.sender for the swap call
@@ -103,15 +97,15 @@ contract AuctionHook is BaseHook {
         BalanceDelta delta,
         bytes calldata hookData
     ) external override returns (bytes4, int128) {
-
         createAuction(sender, key, params, delta);
 
-        (Currency currencyUnspecified, int128 amountUnspecified) =
-            (params.zeroForOne) ? (key.currency1, delta.amount1()) : (key.currency0, delta.amount0());
+        (Currency currencyUnspecified, int128 amountUnspecified) = (params.zeroForOne)
+            ? (key.currency1, delta.amount1())
+            : (key.currency0, delta.amount0());
 
         poolManager.take(currencyUnspecified, address(this), uint256(uint128(amountUnspecified)));
 
-        return (BaseHook.afterSwap.selector, amountUnspecified);
+        return (CLBaseHook.afterSwap.selector, amountUnspecified);
     }
 
     // pre-condition aprove allowance
@@ -121,10 +115,10 @@ contract AuctionHook is BaseHook {
         //check
         require(!isExpired(auction.expiry), "auction expired");
         bool isEnough;
-        if (auction.isAscending){
+        if (auction.isAscending) {
             isEnough = amount > auction.underlyingAmount;
         } else {
-            isEnough = amount < auction.underlyingAmount; 
+            isEnough = amount < auction.underlyingAmount;
         }
         require(isEnough, "not enough");
 
@@ -156,13 +150,12 @@ contract AuctionHook is BaseHook {
 
         Currency winningCurrency = auction.isAscending ? auction.underlyingToken : auction.outcomeToken;
         IERC20 winningToken = IERC20(Currency.unwrap(winningCurrency));
-        uint256 proceeds = auction.isAscending ? 
-            auction.underlyingAmount - auction.underlyingAmountOriginal :
-            auction.underlyingAmountOriginal - auction.underlyingAmount;
+        uint256 proceeds = auction.isAscending
+            ? auction.underlyingAmount - auction.underlyingAmountOriginal
+            : auction.underlyingAmountOriginal - auction.underlyingAmount;
         winningToken.transfer(auction.winner, auction.underlyingAmount);
         winningToken.transfer(owner, proceeds);
     }
-
 
     function createAuction(
         address sender,
@@ -175,13 +168,13 @@ contract AuctionHook is BaseHook {
         // when when swap the underlying for the outcome, we use ascending auctions, else decending
         bool isAscending = params.zeroForOne && isZeroUnderlying;
 
-        (Currency underlying, int128 underlyingAmount) = isZeroUnderlying ? 
-            (key.currency0, delta.amount0()) : 
-            (key.currency1, delta.amount1());
+        (Currency underlying, int128 underlyingAmount) = isZeroUnderlying
+            ? (key.currency0, delta.amount0())
+            : (key.currency1, delta.amount1());
 
-        (Currency outcome, int128 outcomeAmount) = isZeroUnderlying ? 
-            (key.currency0, delta.amount0()) : 
-            (key.currency1, delta.amount1());
+        (Currency outcome, int128 outcomeAmount) = isZeroUnderlying
+            ? (key.currency0, delta.amount0())
+            : (key.currency1, delta.amount1());
 
         // todo use unique hash for common info in key value mapping
         // eg keccak256(abi.encode(auctionAmount, auctionToken, isAscending, bidToken))
@@ -212,4 +205,3 @@ contract AuctionHook is BaseHook {
         return uint64(block.timestamp + TIMEOUT);
     }
 }
-

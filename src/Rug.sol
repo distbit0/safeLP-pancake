@@ -1,19 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {BaseHook} from "v4-periphery/BaseHook.sol"; 
-import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
-import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
-import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "../lib/v4-core/src/types/PoolId.sol";
-import {BalanceDelta} from "../lib/v4-core/src/types/BalanceDelta.sol";
-import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/v4-core/src/types/BeforeSwapDelta.sol";
+import {CLBaseHook} from "src/CLBaseHook.sol";
+import {Hooks} from "../lib/pancake-v4-core/src/pool-cl/libraries/CLHooks.sol";
+import {IPoolManager} from "../lib/pancake-v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "../lib/pancake-v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "../lib/pancake-v4-core/src/types/PoolId.sol";
+import {BalanceDelta} from "../lib/pancake-v4-core/src/types/BalanceDelta.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/pancake-v4-core/src/types/BeforeSwapDelta.sol";
 import {BaseClass} from "./BaseClass.sol";
 
-
-
 contract Rug is BaseClass {
-
     error TimeExpired();
 
     using PoolIdLibrary for PoolKey;
@@ -31,17 +28,11 @@ contract Rug is BaseClass {
 
     uint256 public immutable endTime;
 
-    constructor(IPoolManager _poolManager, uint256 _endTime) BaseHook(_poolManager)  {
+    constructor(IPoolManager _poolManager, uint256 _endTime) CLBaseHook(_poolManager) {
         endTime = _endTime;
     }
 
-    function getHookPermissions()
-        public
-        pure
-        virtual
-        override
-        returns (Hooks.Permissions memory)
-    {
+    function getHookPermissions() public pure virtual override returns (Hooks.Permissions memory) {
         return
             Hooks.Permissions({
                 beforeInitialize: false,
@@ -74,14 +65,8 @@ contract Rug is BaseClass {
         super._beforeSwap(usr, key, params, data);
         if (block.timestamp >= endTime) revert TimeExpired();
 
-
-        return (
-            BaseHook.beforeSwap.selector,
-            BeforeSwapDeltaLibrary.ZERO_DELTA,
-            0
-        );
+        return (CLBaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
-
 
     function _beforeAddLiquidity(
         address usr,
@@ -90,7 +75,6 @@ contract Rug is BaseClass {
         bytes calldata data
     ) internal virtual override returns (bytes4) {
         if (block.timestamp >= endTime) revert TimeExpired();
-        return BaseHook.beforeAddLiquidity.selector;
+        return CLBaseHook.beforeAddLiquidity.selector;
     }
-
 }

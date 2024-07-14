@@ -2,24 +2,24 @@
 pragma solidity ^0.8.24;
 
 import "../lib/forge-std/src/Test.sol";
-import {IHooks} from "../lib/v4-core/src/interfaces/IHooks.sol";
-import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
-import {TickMath} from "../lib/v4-core/src/libraries/TickMath.sol";
-import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
-import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
-import {BalanceDelta} from "../lib/v4-core/src/types/BalanceDelta.sol";
-import {PoolId, PoolIdLibrary} from "../lib/v4-core/src/types/PoolId.sol";
-import {CurrencyLibrary, Currency} from "../lib/v4-core/src/types/Currency.sol";
-import {PoolSwapTest} from "../lib/v4-core/src/test/PoolSwapTest.sol";
-import {Deployers} from "../lib/v4-core/test/utils/Deployers.sol";
-import {StateLibrary} from "../lib/v4-core/src/libraries/StateLibrary.sol";
+import {IHooks} from "../lib/pancake-v4-core/src/interfaces/IHooks.sol";
+import {Hooks} from "../lib/pancake-v4-core/src/pool-cl/libraries/CLHooks.sol";
+import {TickMath} from "../lib/pancake-v4-core/src/pool-cl/libraries/TickMath.sol";
+import {IPoolManager} from "../lib/pancake-v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "../lib/pancake-v4-core/src/types/PoolKey.sol";
+import {BalanceDelta} from "../lib/pancake-v4-core/src/types/BalanceDelta.sol";
+import {PoolId, PoolIdLibrary} from "../lib/pancake-v4-core/src/types/PoolId.sol";
+import {CurrencyLibrary, Currency} from "../lib/pancake-v4-core/src/types/Currency.sol";
+// import {PoolSwapTest} from "../lib/pancake-v4-core/src/test/PoolSwapTest.sol";
+import {Deployers} from "../lib/pancake-v4-core/test/pool-cl/helpers/Deployers.sol";
+// import {StateLibrary} from "../lib/pancake-v4-core/src/libraries/StateLibrary.sol";
 
 import "../src/Auction.sol";
 
 contract AuctionTest is Test, Deployers {
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
-    using StateLibrary for IPoolManager;
+    // using StateLibrary for IPoolManager;
 
     AuctionHook hook;
     PoolId poolId;
@@ -48,12 +48,7 @@ contract AuctionTest is Test, Deployers {
         // Provide full-range liquidity to the pool
         modifyLiquidityRouter.modifyLiquidity(
             key,
-            IPoolManager.ModifyLiquidityParams(
-                TickMath.minUsableTick(60),
-                TickMath.maxUsableTick(60),
-                10_000 ether,
-                0
-            ),
+            IPoolManager.ModifyLiquidityParams(TickMath.minUsableTick(60), TickMath.maxUsableTick(60), 10_000 ether, 0),
             ZERO_BYTES
         );
     }
@@ -68,14 +63,9 @@ contract AuctionTest is Test, Deployers {
         int256 amountSpecified = -1e18; // negative number indicates exact input swap!
 
         // trading before end time
-        BalanceDelta swapDelta = swap(
-            key,
-            zeroForOne,
-            amountSpecified,
-            ZERO_BYTES
-        );
+        BalanceDelta swapDelta = swap(key, zeroForOne, amountSpecified, ZERO_BYTES);
 
-        (,,,,,,uint64 expiry,) = hook.auctions(0);
+        (, , , , , , uint64 expiry, ) = hook.auctions(0);
         assertEq(expiry, block.timestamp + hook.TIMEOUT());
     }
 }

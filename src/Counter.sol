@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {BaseHook} from "v4-periphery/BaseHook.sol";
-import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
-import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
-import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "../lib/v4-core/src/types/PoolId.sol";
-import {BalanceDelta} from "../lib/v4-core/src/types/BalanceDelta.sol";
-import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/v4-core/src/types/BeforeSwapDelta.sol";
+import {CLBaseHook} from "src/CLBaseHook.sol";
+import {Hooks} from "../lib/pancake-v4-core/src/pool-cl/libraries/CLHooks.sol";
+import {IPoolManager} from "../lib/pancake-v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "../lib/pancake-v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "../lib/pancake-v4-core/src/types/PoolId.sol";
+import {BalanceDelta} from "../lib/pancake-v4-core/src/types/BalanceDelta.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/pancake-v4-core/src/types/BeforeSwapDelta.sol";
 import {BaseClass} from "./BaseClass.sol";
 
 contract Counter is BaseClass {
@@ -24,14 +24,9 @@ contract Counter is BaseClass {
     mapping(PoolId => uint256 count) public beforeAddLiquidityCount;
     mapping(PoolId => uint256 count) public beforeRemoveLiquidityCount;
 
-    constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}
+    constructor(IPoolManager _poolManager) CLBaseHook(_poolManager) {}
 
-    function getHookPermissions()
-        public
-        pure
-        override
-        returns (Hooks.Permissions memory)
-    {
+    function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return
             Hooks.Permissions({
                 beforeInitialize: false,
@@ -63,11 +58,7 @@ contract Counter is BaseClass {
     ) internal virtual override returns (bytes4, BeforeSwapDelta, uint24) {
         super._beforeSwap(usr, key, params, data);
         beforeSwapCount[key.toId()]++;
-        return (
-            BaseHook.beforeSwap.selector,
-            BeforeSwapDeltaLibrary.ZERO_DELTA,
-            0
-        );
+        return (CLBaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
     function _afterSwap(
@@ -79,7 +70,7 @@ contract Counter is BaseClass {
     ) internal virtual override returns (bytes4, int128) {
         super._afterSwap(usr, key, params, delta, data);
         afterSwapCount[key.toId()]++;
-        return (BaseHook.afterSwap.selector, 0);
+        return (CLBaseHook.afterSwap.selector, 0);
     }
 
     function _beforeAddLiquidity(
@@ -90,7 +81,7 @@ contract Counter is BaseClass {
     ) internal virtual override returns (bytes4) {
         super._beforeAddLiquidity(usr, key, params, data);
         beforeAddLiquidityCount[key.toId()]++;
-        return BaseHook.beforeAddLiquidity.selector;
+        return CLBaseHook.beforeAddLiquidity.selector;
     }
     function _beforeRemoveLiquidity(
         address usr,
@@ -100,6 +91,6 @@ contract Counter is BaseClass {
     ) internal virtual override returns (bytes4) {
         super._beforeRemoveLiquidity(usr, key, params, data);
         beforeRemoveLiquidityCount[key.toId()]++;
-        return BaseHook.beforeRemoveLiquidity.selector;
+        return CLBaseHook.beforeRemoveLiquidity.selector;
     }
 }

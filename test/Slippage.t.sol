@@ -2,23 +2,23 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
-import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
-import {Hooks} from "v4-core/src/libraries/Hooks.sol";
-import {TickMath} from "v4-core/src/libraries/TickMath.sol";
-import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
-import {PoolKey} from "v4-core/src/types/PoolKey.sol";
-import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
-import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
-import {CurrencyLibrary, Currency} from "v4-core/src/types/Currency.sol";
-import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
-import {Deployers} from "v4-core/test/utils/Deployers.sol";
+import {IHooks} from "pancake-v4-core/src/interfaces/IHooks.sol";
+import {Hooks} from "pancake-v4-core/src/pool-cl/libraries/CLHooks.sol";
+import {TickMath} from "pancake-v4-core/src/pool-cl/libraries/TickMath.sol";
+import {IPoolManager} from "pancake-v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "pancake-v4-core/src/types/PoolKey.sol";
+import {BalanceDelta} from "pancake-v4-core/src/types/BalanceDelta.sol";
+import {PoolId, PoolIdLibrary} from "pancake-v4-core/src/types/PoolId.sol";
+import {CurrencyLibrary, Currency} from "pancake-v4-core/src/types/Currency.sol";
+// import {PoolSwapTest} from "pancake-v4-core/src/test/PoolSwapTest.sol";
+import {Deployers} from "pancake-v4-core/test/pool-cl/helpers/Deployers.sol";
 import {Slippage} from "../src/Slippage.sol";
-import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+// import {StateLibrary} from "pancake-v4-core/src/libraries/StateLibrary.sol";
 
 contract SlippageTest is Test, Deployers {
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
-    using StateLibrary for IPoolManager;
+    // using StateLibrary for IPoolManager;
 
     Slippage hook;
     PoolId poolId;
@@ -31,9 +31,11 @@ contract SlippageTest is Test, Deployers {
         // Deploy the hook to an address with the correct flags
         address flags = address(
             uint160(
-                Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG
-                   /* | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG */
-                    | Hooks.AFTER_REMOVE_LIQUIDITY_FLAG 
+                Hooks.BEFORE_SWAP_FLAG |
+                    Hooks.AFTER_SWAP_FLAG |
+                    Hooks.BEFORE_ADD_LIQUIDITY_FLAG |
+                    /* | Hooks.AFTER_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_REMOVE_LIQUIDITY_FLAG */
+                    Hooks.AFTER_REMOVE_LIQUIDITY_FLAG
             ) ^ (0x4444 << 144) // Namespace the hook to avoid collisions
         );
         deployCodeTo("Slippage.sol:Slippage", abi.encode(manager), flags);
@@ -63,16 +65,17 @@ contract SlippageTest is Test, Deployers {
     }
 
     function testLiquidityHooks() public {
-
         // remove liquidity
         int256 liquidityDelta = -1e18;
         modifyLiquidityRouter.modifyLiquidity(
             key,
             IPoolManager.ModifyLiquidityParams(
-                TickMath.minUsableTick(60), TickMath.maxUsableTick(60), liquidityDelta, 0
+                TickMath.minUsableTick(60),
+                TickMath.maxUsableTick(60),
+                liquidityDelta,
+                0
             ),
             ZERO_BYTES
         );
-
     }
 }
