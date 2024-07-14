@@ -14,6 +14,7 @@ forge install
 forge test
 ```
 
+Main logic is under src/Slippage.sol and src/Auction.sol
 
 We enable prediction markets to use AMMs by protecting LPs from severe IL and LVR costs. This eliminates the key barrier that currently forces prediction markets to rely on order books.
 
